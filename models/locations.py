@@ -18,7 +18,11 @@ class Location(BaseModel, Base):
     
     # Additional fields
     tags = Column(ARRAY(String(50)), nullable=True)
-    stream_link = Column(String(255), nullable=True)
+    
+    # Streaming related fields
+    input_stream_url = Column(String(255), nullable=True)
+    output_stream_url = Column(String(255), nullable=True)
+    thumbnail = Column(String(255), nullable=True)
     
     # Relationship with User
     user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)

@@ -10,7 +10,9 @@ class LocationBase(BaseModel):
     longitude: float
     description: Optional[str] = None
     tags: Optional[List[str]] = None
-    stream_link: Optional[str] = None
+    input_stream_url: Optional[str] = None
+    output_stream_url: Optional[str] = None
+    thumbnail: Optional[str] = None
 
 class LocationCreate(LocationBase):
     """Schema for creating a new location"""
@@ -23,7 +25,9 @@ class LocationUpdate(BaseModel):
     longitude: Optional[float] = None
     description: Optional[str] = None
     tags: Optional[List[str]] = None
-    stream_link: Optional[str] = None
+    input_stream_url: Optional[str] = None
+    output_stream_url: Optional[str] = None
+    thumbnail: Optional[str] = None
 
 class LocationResponse(LocationBase):
     """Schema for location response data"""

@@ -21,7 +21,9 @@ TEST_LOCATION = {
     "longitude": -74.0060,
     "description": "Test location for API testing",
     "tags": ["test", "api", "location"],
-    "stream_link": "https://example.com/stream/test"
+    "input_stream_url": "https://example.com/input/test",
+    "output_stream_url": "https://example.com/output/test",
+    "thumbnail": "https://example.com/thumbnails/test.jpg"
 }
 
 TEST_LOCATION_2 = {
@@ -30,7 +32,9 @@ TEST_LOCATION_2 = {
     "longitude": -122.4194,
     "description": "Another test location",
     "tags": ["sample", "api", "testing"],
-    "stream_link": "https://example.com/stream/sample"
+    "input_stream_url": "https://example.com/input/sample",
+    "output_stream_url": "https://example.com/output/sample",
+    "thumbnail": "https://example.com/thumbnails/sample.jpg"
 }
 
 # Store location data during tests
@@ -67,7 +71,9 @@ def test_create_location():
     assert response_data["longitude"] == TEST_LOCATION["longitude"]
     assert response_data["description"] == TEST_LOCATION["description"]
     assert response_data["tags"] == TEST_LOCATION["tags"]
-    assert response_data["stream_link"] == TEST_LOCATION["stream_link"]
+    assert response_data["input_stream_url"] == TEST_LOCATION["input_stream_url"]
+    assert response_data["output_stream_url"] == TEST_LOCATION["output_stream_url"]
+    assert response_data["thumbnail"] == TEST_LOCATION["thumbnail"]
     assert is_valid_uuid(response_data["id"]), "Invalid location ID format"
     assert is_valid_uuid(response_data["user_id"]), "Invalid user ID format"
     
