@@ -15,6 +15,7 @@ from config.config import settings
 from database import get_db, init_db
 from api.users import router as users_router
 from api.auth import router as auth_router
+from api.locations import router as locations_router
 
 # Configure logging
 logging.basicConfig(
@@ -102,6 +103,7 @@ app = FastAPI(
 # Include API routers
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(locations_router, prefix=settings.API_V1_STR)
 
 # Set up CORS middleware
 if settings.BACKEND_CORS_ORIGINS:

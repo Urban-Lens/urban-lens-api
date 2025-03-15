@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import relationship
 
 from models.base import BaseModel
 from database import Base
@@ -23,6 +24,9 @@ class User(BaseModel, Base):
     # Account status
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    
+    # Relationships
+    locations = relationship("Location", back_populates="user", cascade="all, delete")
     
     # Helper methods for password hashing
     @property

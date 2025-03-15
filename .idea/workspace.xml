@@ -4,20 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80667d25-b727-4070-b736-bdabbc687e5d" name="Changes" comment="initial commit">
-      <change afterPath="$PROJECT_DIR$/personal-finance-app-430916-f010186ce60e.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/research/Live Gemini Video.ipynb" afterDir="false" />
+    <list default="true" id="80667d25-b727-4070-b736-bdabbc687e5d" name="Changes" comment="db update">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/alembic.ini" beforeDir="false" afterPath="$PROJECT_DIR$/alembic.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/api/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/users.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/users.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modules/auth/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/modules/auth/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modules/auth/auth_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/modules/auth/auth_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modules/auth/schema.py" beforeDir="false" afterPath="$PROJECT_DIR$/modules/auth/schema.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,6 +21,11 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GithubDefaultAccount">
@@ -57,7 +50,7 @@
     "FastAPI.Unnamed.executor": "Run",
     "FastAPI.UrbanLens.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "ai-branch",
     "last_opened_file_path": "/Users/sammarieobrown/PycharmProjects/urban-lens-api",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -144,7 +137,7 @@
       <option name="presentableId" value="Default" />
       <updated>1742057980678</updated>
       <workItem from="1742057981857" duration="2618000" />
-      <workItem from="1742061802954" duration="6250000" />
+      <workItem from="1742061802954" duration="8388000" />
     </task>
     <task id="LOCAL-00001" summary="initial commit">
       <option name="closed" value="true" />
@@ -178,7 +171,15 @@
       <option name="project" value="LOCAL" />
       <updated>1742063302961</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="db update">
+      <option name="closed" value="true" />
+      <created>1742069588074</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1742069588074</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -186,7 +187,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="initial commit" />
-    <option name="LAST_COMMIT_MESSAGE" value="initial commit" />
+    <MESSAGE value="db update" />
+    <option name="LAST_COMMIT_MESSAGE" value="db update" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/urban_lens_api$UrbanLens.coverage" NAME="UrbanLens Coverage Results" MODIFIED="1742065895983" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
