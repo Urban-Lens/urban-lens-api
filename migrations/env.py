@@ -13,13 +13,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Import models and config
 from database import Base  
 from models.users import User  # Import all models here
+from config.config import settings  # Import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
 # We're using the connection string from alembic.ini now
-# config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -26,11 +26,11 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     # Database
-    POSTGRES_SERVER: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
-    POSTGRES_PORT: str
+    POSTGRES_SERVER: str = "localhost"  # Default to localhost for development
+    POSTGRES_USER: str = "urban_lens"
+    POSTGRES_PASSWORD: str = "urban_lens"
+    POSTGRES_DB: str = "urban_lens"
+    POSTGRES_PORT: str = "5432"
     
     # Database operations
     RUN_MIGRATIONS: bool = False  # Temporarily disabled for testing
@@ -38,11 +38,22 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """Return the async database URL"""
+        # Check for environment variable - Render uses DATABASE_URL
+        render_db_url = os.environ.get("DATABASE_URL")
+        if render_db_url:
+            # If using Render, convert standard postgres:// URL to asyncpg format
+            return render_db_url.replace("postgres://", "postgresql+asyncpg://")
+        # Otherwise use the individual components for local development
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
         """Return a synchronous database URL for Alembic"""
+        # Check for environment variable - Render uses DATABASE_URL
+        render_db_url = os.environ.get("DATABASE_URL")
+        if render_db_url:
+            return render_db_url
+        # Otherwise use the individual components for local development
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Redis
@@ -71,6 +82,19 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
+    # Since we're using pydantic-settings, customize field names with model_config
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "env_prefix": "",
+        # Map environment variable names to field names
+        "extra": "allow",  # Allow extra fields that aren't defined in the model
+        # Alias mapping for environment variables
+        "aliases": {
+            "DATABASE_URL": "DATABASE_URL_ENV" 
+        }
+    }
 
 
 # Create a global settings instance
