@@ -79,21 +79,10 @@ class Settings(BaseSettings):
     
 
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-    # Since we're using pydantic-settings, customize field names with model_config
+    # Pydantic v2 configuration
     model_config = {
         "env_file": ".env",
         "case_sensitive": True,
-        "env_prefix": "",
-        # Map environment variable names to field names
-        "extra": "allow",  # Allow extra fields that aren't defined in the model
-        # Alias mapping for environment variables
-        "aliases": {
-            "DATABASE_URL": "DATABASE_URL_ENV" 
-        }
     }
 
 
