@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,7 +9,11 @@ from contextlib import asynccontextmanager
 import asyncio
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from config.config import settings
+from database import get_db, init_db
+from api.users import router as users_router
 
 # Configure logging
 logging.basicConfig(
@@ -18,6 +22,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Lifespan context manager for startup/shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Application starting up...")
+    
+    # Initialize database
+    logger.info("Initializing database...")
+    await init_db()
+    
+    yield
+    
+    # Shutdown
+    logger.info("Application shutting down...")
 
 # Request processing time middleware
 class TimingMiddleware(BaseHTTPMiddleware):
@@ -71,14 +89,18 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Rentelio Property Management Platform API",
+    description="Urban Lens API",
     version="0.1.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
-    # debug=settings.DEBUG,
-    # lifespan=lifespan,
+    debug=settings.DEBUG,
+    lifespan=lifespan,
 )
+
+# Include API routers
+app.include_router(users_router, prefix=settings.API_V1_STR)
+
 # Set up CORS middleware
 if settings.BACKEND_CORS_ORIGINS:
     origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
@@ -117,8 +139,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.exception(f"Unhandled exception: {exc}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content= ()
-
+        content={"detail": "Internal server error"}
     )
 
 

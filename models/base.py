@@ -4,8 +4,6 @@ from sqlalchemy import Column, DateTime, Boolean, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declared_attr
 
-from src.core.database import Base
-
 class BaseModel:
     """Base class for all models to inherit common fields and methods"""
     
