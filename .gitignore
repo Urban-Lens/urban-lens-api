@@ -119,4 +119,12 @@ dmypy.json
 .env
 
 # Docker volumes
-postgres_data/ 
+postgres_data/
+
+# Google Cloud credentials
+personal-finance-app-430916-f010186ce60e.json
+*.json
+
+# Research directory
+research/
+research/* 
