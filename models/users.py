@@ -1,8 +1,9 @@
-from sqlalchemy import Column, String, Boolean
+from sqlalchemy import Column, String, Boolean, select
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime
 from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.base import BaseModel
 from database import Base
@@ -50,9 +51,11 @@ class User(BaseModel, Base):
         return await super().create(db, **kwargs)
     
     @classmethod
-    async def get_by_email(cls, db, email: str):
+    async def get_by_email(cls, db: AsyncSession, email: str):
         """Get a user by email address"""
-        return await db.query(cls).filter(cls.email == email).first()
+        query = select(cls).where(cls.email == email)
+        result = await db.execute(query)
+        return result.scalars().first()
     
     def __repr__(self):
         return f"<User {self.email} ({self.full_name})>"

@@ -26,11 +26,11 @@ class Settings(BaseSettings):
         raise ValueError(v)
 
     # Database
-    POSTGRES_SERVER: str = "localhost"  # Default to localhost
-    POSTGRES_USER: str = "urban_lens"
-    POSTGRES_PASSWORD: str = "urban_lens"
-    POSTGRES_DB: str = "urban_lens"
-    POSTGRES_PORT: str = "5432"
+    POSTGRES_SERVER: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_PORT: str
     
     # Database operations
     RUN_MIGRATIONS: bool = False  # Temporarily disabled for testing
