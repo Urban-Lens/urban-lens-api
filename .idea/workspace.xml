@@ -65,7 +65,7 @@
       <recent name="$PROJECT_DIR$/modules/analytics" />
     </key>
   </component>
-  <component name="RunManager" selected="Docker.docker-compose.yml: Compose Deployment">
+  <component name="RunManager" selected="FastAPI.UrbanLens">
     <configuration name="UrbanLens" type="Python.FastAPI">
       <option name="file" value="$PROJECT_DIR$/main.py" />
       <module name="urban-lens-api" />
