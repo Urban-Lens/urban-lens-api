@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     company_name: Optional[str] = Field(None, max_length=255)
+    industry: Optional[str] = Field(None, max_length=255)
 
 
 class UserCreate(UserBase):
@@ -36,6 +37,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     company_name: Optional[str] = Field(None, max_length=255)
+    industry: Optional[str] = Field(None, max_length=255)
 
 
 class UserPasswordUpdate(BaseModel):

@@ -13,7 +13,8 @@ TEST_USER = {
     "last_name": "User",
     "email": "testuser@example.com",
     "password": "Test1234!",
-    "company_name": "Test Company"
+    "company_name": "Test Company",
+    "industry": "Technology"
 }
 
 # Additional test users
@@ -22,7 +23,8 @@ TEST_USER_2 = {
     "last_name": "Doe",
     "email": "johndoe@example.com",
     "password": "Secure123!",
-    "company_name": "Acme Inc"
+    "company_name": "Acme Inc",
+    "industry": "Manufacturing"
 }
 
 # Store tokens and user data during tests

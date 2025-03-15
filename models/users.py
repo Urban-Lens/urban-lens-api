@@ -20,6 +20,7 @@ class User(BaseModel, Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     company_name = Column(String(255), nullable=True)
+    industry = Column(String(255), nullable=True)
     
     # Account status
     is_active = Column(Boolean, default=True)
