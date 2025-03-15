@@ -6,6 +6,7 @@ import uuid
 from database import get_db
 from modules.users.schema import UserCreate, UserResponse, UserUpdate, UserPasswordUpdate
 from modules.users.user_service import UserService
+from api.auth import get_current_active_user
 
 router = APIRouter(
     prefix="/users",
@@ -44,6 +45,7 @@ async def get_users(
 async def update_user(
     user_id: uuid.UUID,
     user_data: UserUpdate,
+    current_user = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a user's information"""
@@ -54,6 +56,7 @@ async def update_user(
 async def update_password(
     user_id: uuid.UUID,
     password_data: UserPasswordUpdate,
+    current_user = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a user's password"""
@@ -68,6 +71,7 @@ async def update_password(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
+    current_user = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a user"""
