@@ -18,23 +18,42 @@ router = APIRouter(
 @router.post("/traffic-analysis", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_traffic_analysis(
     hours_ago: int = Query(1, description="Process images from X hours ago"),
+    custom_prompt: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """
     Trigger traffic image analysis for a specific hour.
     This is an asynchronous operation - it returns immediately but processing continues in the background.
+    
+    - **hours_ago**: Process images from X hours ago
+    - **custom_prompt**: Optional custom prompt for the Gemini API analysis
     """
     # Calculate the target hour
     target_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_ago)
     
     # Start the processing in the background
     async def process_in_background():
-        await process_hourly_traffic_images(
-            db=db,
-            gemini_api_key=settings.GEMINI_API_KEY,
-            target_hour=target_hour
-        )
+        if custom_prompt:
+            # Custom processing with provided prompt
+            from modules.analytics.batch_analytics import get_hourly_images, analyze_image_with_gemini_base64, store_analysis_results
+            
+            records = await get_hourly_images(db, target_hour)
+            
+            for record in records:
+                analysis_result = analyze_image_with_gemini_base64(
+                    record["output_img_path"], 
+                    settings.GEMINI_API_KEY, 
+                    custom_prompt
+                )
+                await store_analysis_results(db, record["id"], analysis_result)
+        else:
+            # Use standard processing
+            await process_hourly_traffic_images(
+                db=db,
+                gemini_api_key=settings.GEMINI_API_KEY,
+                target_hour=target_hour
+            )
     
     # Schedule the background task
     import asyncio
@@ -42,7 +61,8 @@ async def trigger_traffic_analysis(
     
     return {
         "message": f"Traffic analysis started for hour {target_hour}",
-        "target_hour": target_hour.isoformat()
+        "target_hour": target_hour.isoformat(),
+        "custom_prompt": custom_prompt is not None
     }
 
 @router.get("/traffic-analysis")

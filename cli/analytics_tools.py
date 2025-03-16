@@ -23,7 +23,8 @@ def analytics():
 @analytics.command()
 @click.option('--hours-ago', default=1, help='Process images from X hours ago')
 @click.option('--api-key', default=None, help='Gemini API key (defaults to settings)')
-async def analyze_traffic_images(hours_ago, api_key):
+@click.option('--prompt', default=None, help='Custom analysis prompt (defaults to standard prompt)')
+async def analyze_traffic_images(hours_ago, api_key, prompt):
     """Process traffic images from a specific hour"""
     target_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_ago)
     
@@ -34,11 +35,36 @@ async def analyze_traffic_images(hours_ago, api_key):
     
     async for db in get_db():
         try:
-            results = await process_hourly_traffic_images(
-                db=db,
-                gemini_api_key=api_key,
-                target_hour=target_hour
-            )
+            # Override the default prompt if a custom one is provided
+            custom_params = {}
+            if prompt:
+                # Create a custom processing function with the custom prompt
+                async def custom_processing(target_hour):
+                    records = await get_hourly_images(db, target_hour)
+                    
+                    if not records:
+                        return []
+                    
+                    results = []
+                    for record in records:
+                        analysis_result = analyze_image_with_gemini_base64(
+                            record["output_img_path"], 
+                            api_key, 
+                            prompt
+                        )
+                        await store_analysis_results(db, record["id"], analysis_result)
+                        record["analysis_result"] = analysis_result
+                        results.append(record)
+                    
+                    return results
+                
+                results = await custom_processing(target_hour)
+            else:
+                results = await process_hourly_traffic_images(
+                    db=db,
+                    gemini_api_key=api_key,
+                    target_hour=target_hour
+                )
             
             click.echo(f"Successfully processed {len(results)} images")
             

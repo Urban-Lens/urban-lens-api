@@ -171,11 +171,10 @@ async def process_hourly_traffic_images(db: AsyncSession, gemini_api_key: str, t
         
         # Set up the prompt for traffic analysis
         analysis_prompt = (
-            "Analyze this traffic image and provide: "
-            "1. Count of vehicles visible "
-            "2. Types of vehicles present (car, truck, bus, etc.) "
-            "3. Traffic density assessment (light, moderate, heavy) "
-            "4. Any unusual events or hazards"
+            """give a stuctured analysis based on the traffic image 
+
+analyse the image to look at the type of vehicles, also i want to get some inference on the overall income based on the vehicles, also analyze foot traffic and so on give insights in to whether it's a busy area or not 
+etc"""
         )
         
         # Analyze the image
