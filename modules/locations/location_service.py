@@ -82,7 +82,11 @@ class LocationService:
         location = await LocationService.get_location_by_id(db, location_id)
         
         # Update the user_id
-        location_update = {"user_id": user_id}
-        updated_location = await Location.update(db, location.id, **location_update)
+        location.user_id = user_id
         
-        return updated_location 
+        # Save changes
+        db.add(location)
+        await db.commit()
+        await db.refresh(location)
+        
+        return location 
