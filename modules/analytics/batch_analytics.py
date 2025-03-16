@@ -1231,3 +1231,237 @@ async def get_business_recommendations(db: AsyncSession, limit: int = 10, locati
     except Exception as e:
         logger.error(f"Error retrieving business recommendations: {e}")
         raise
+
+
+async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str, industry: str) -> Dict[str, Any]:
+    """
+    Generate a business recommendation based on traffic metrics and image analysis for a specific location.
+    
+    Args:
+        db: Database session
+        location_id: Location ID to generate recommendation for
+        gemini_api_key: Gemini API key
+        industry: Industry context for targeted recommendations
+        
+    Returns:
+        Dictionary with recommendation results
+    """
+    try:
+        # Get location information
+        location_query = text("""
+            SELECT id, address
+            FROM location
+            WHERE id = :location_id
+        """)
+        
+        location_result = await db.execute(location_query, {"location_id": str(location_id)})
+        location = location_result.mappings().first()
+        
+        if not location:
+            raise ValueError(f"Location with ID {location_id} not found")
+        
+        # Get hourly aggregated data for all locations with the target location marked
+        all_locations_query = text("""
+            WITH hourly_metrics AS (
+                SELECT 
+                    source_id,
+                    l.address,
+                    date_trunc('hour', timestamp) as hour,
+                    AVG(people_ct) as avg_people,
+                    AVG(vehicle_ct) as avg_vehicles,
+                    COUNT(*) as data_points
+                FROM 
+                    timeseries_analytics ta
+                JOIN
+                    location l ON ta.source_id = l.id::text
+                WHERE 
+                    people_ct IS NOT NULL 
+                    AND vehicle_ct IS NOT NULL
+                GROUP BY 
+                    source_id, l.address, date_trunc('hour', timestamp)
+            ),
+            location_summaries AS (
+                SELECT
+                    source_id,
+                    address,
+                    AVG(avg_people) as avg_people_per_hour,
+                    MAX(avg_people) as peak_people,
+                    AVG(avg_vehicles) as avg_vehicles_per_hour,
+                    MAX(avg_vehicles) as peak_vehicles,
+                    COUNT(*) as hours_with_data,
+                    (source_id = :location_id) as is_target
+                FROM
+                    hourly_metrics
+                GROUP BY
+                    source_id, address
+            )
+            SELECT * FROM location_summaries
+            ORDER BY avg_people_per_hour DESC, avg_vehicles_per_hour DESC
+        """)
+        
+        all_locations_result = await db.execute(all_locations_query, {"location_id": str(location_id)})
+        all_locations_data = all_locations_result.mappings().all()
+        
+        if not all_locations_data:
+            raise ValueError("No traffic data found for any locations")
+            
+        # Find detailed data for our target location
+        target_location_data = None
+        location_rankings = {}
+        total_locations = len(all_locations_data)
+        
+        for i, loc in enumerate(all_locations_data):
+            if loc["is_target"]:
+                target_location_data = dict(loc)
+                # Calculate rankings (1-based)
+                location_rankings = {
+                    "people_rank": i + 1,
+                    "people_percentile": round(100 * (total_locations - i) / total_locations),
+                    "total_locations": total_locations
+                }
+                break
+                
+        if not target_location_data:
+            raise ValueError(f"Target location with ID {location_id} not found in traffic data")
+        
+        # Get the latest image for this location from timeseries_analytics
+        latest_image_query = text("""
+            SELECT output_img_path, timestamp
+            FROM timeseries_analytics
+            WHERE source_id = :location_id
+              AND output_img_path IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """)
+        
+        latest_image_result = await db.execute(latest_image_query, {"location_id": str(location_id)})
+        latest_image = latest_image_result.mappings().first()
+        
+        image_analysis = None
+        if latest_image and latest_image["output_img_path"]:
+            # Analyze the image with Gemini
+            image_prompt = f"""
+            Look at this image from location "{location['address']}" and analyze:
+            1. The type of traffic visible (pedestrian vs vehicular)
+            2. Types of vehicles seen (if any), to estimate income level of the area
+            3. General environment characteristics
+            4. The overall environment 'vibe'
+            
+            Provide a very brief summary that would be relevant for a {industry} business considering this location.
+            """
+            
+            image_analysis = analyze_image_with_gemini_base64(
+                image_url=latest_image["output_img_path"],
+                api_key=gemini_api_key,
+                prompt=image_prompt
+            )
+        
+        # Get traffic pattern data
+        target_hourly_query = text("""
+            SELECT 
+                date_trunc('hour', timestamp) as hour,
+                AVG(people_ct) as avg_people,
+                AVG(vehicle_ct) as avg_vehicles,
+                COUNT(*) as data_points
+            FROM 
+                timeseries_analytics
+            WHERE 
+                source_id = :location_id
+                AND people_ct IS NOT NULL 
+                AND vehicle_ct IS NOT NULL
+            GROUP BY 
+                date_trunc('hour', timestamp)
+            ORDER BY 
+                hour DESC
+            LIMIT 168  -- Last 7 days of hourly data
+        """)
+        
+        target_hourly_result = await db.execute(target_hourly_query, {"location_id": str(location_id)})
+        target_hourly_data = target_hourly_result.mappings().all()
+        
+        # Prepare data for the prompt
+        location_comparison = []
+        for loc in all_locations_data:
+            comparison_entry = {
+                "address": loc["address"],
+                "avg_people_per_hour": round(float(loc["avg_people_per_hour"] or 0), 2),
+                "avg_vehicles_per_hour": round(float(loc["avg_vehicles_per_hour"] or 0), 2),
+                "people_to_vehicle_ratio": round(float(loc["avg_people_per_hour"] or 0) / 
+                                              max(float(loc["avg_vehicles_per_hour"] or 1), 1), 2),
+                "is_target_location": loc["is_target"]
+            }
+            location_comparison.append(comparison_entry)
+            
+        target_hourly_formatted = []
+        for record in target_hourly_data:
+            target_hourly_formatted.append({
+                "hour": record["hour"].isoformat(),
+                "avg_people": round(float(record["avg_people"] or 0), 2),
+                "avg_vehicles": round(float(record["avg_vehicles"] or 0), 2),
+                "data_points": int(record["data_points"])
+            })
+        
+        # Create the prompt
+        prompt = f"""
+I need a business recommendation for a {industry} business considering location at "{target_location_data['address']}".
+
+Here's how this location ranks among {total_locations} total locations:
+- Ranked #{location_rankings['people_rank']} for average foot traffic
+- In the {location_rankings['people_percentile']}th percentile for foot traffic
+- Average people per hour: {round(float(target_location_data['avg_people_per_hour'] or 0), 2)}
+- Average vehicles per hour: {round(float(target_location_data['avg_vehicles_per_hour'] or 0), 2)}
+- Foot traffic to vehicle ratio: {round(float(target_location_data['avg_people_per_hour'] or 0) / max(float(target_location_data['avg_vehicles_per_hour'] or 1), 1), 2)}
+
+{"Image analysis: " + image_analysis if image_analysis else "No recent image available for analysis."}
+
+Based on this data, provide a brief recommendation (2-3 sentences) on whether this location is a good fit for a {industry} business. Consider the traffic patterns, location ranking, and image analysis in your assessment.
+"""
+        
+        # Measure execution time
+        start_time = time.time()
+        
+        # Get recommendation from Gemini
+        client = genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=prompt
+        )
+        
+        # Process the response
+        recommendation_text = response.text
+        
+        # Calculate execution time in milliseconds
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Store the recommendation in the LLM analytics table
+        recommendation_id = await store_llm_analytics(
+            db=db, 
+            prompt=prompt, 
+            response=recommendation_text, 
+            execution_time_ms=execution_time_ms
+        )
+        
+        result = {
+            "location_id": location_id,
+            "location_address": location["address"],
+            "industry": industry,
+            "ranking": location_rankings,
+            "recommendation": recommendation_text.strip(),
+            "image_analyzed": latest_image["output_img_path"] if latest_image else None,
+            "image_timestamp": latest_image["timestamp"].isoformat() if latest_image and latest_image["timestamp"] else None,
+            "image_analysis": image_analysis,
+            "traffic_stats": {
+                "avg_people_per_hour": round(float(target_location_data['avg_people_per_hour'] or 0), 2),
+                "avg_vehicles_per_hour": round(float(target_location_data['avg_vehicles_per_hour'] or 0), 2),
+                "foot_to_vehicle_ratio": round(float(target_location_data['avg_people_per_hour'] or 0) / 
+                                           max(float(target_location_data['avg_vehicles_per_hour'] or 1), 1), 2)
+            },
+            "recommendation_id": recommendation_id,
+            "generated_at": datetime.utcnow().isoformat(),
+            "execution_time_ms": execution_time_ms
+        }
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error generating business recommendation: {e}")
+        raise
