@@ -30,7 +30,6 @@ loguru>=0.7.0
 
 # Analytics dependencies
 boto3>=1.34.22
-google-generativeai>=0.4.0
 APScheduler>=3.10.1
 click>=8.1.3
 
@@ -42,3 +41,4 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.5
 Pillow>=10.1.0
 requests>=2.31.0 
+google-genai
