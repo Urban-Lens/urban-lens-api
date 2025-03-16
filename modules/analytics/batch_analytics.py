@@ -915,7 +915,7 @@ The three terms/phrases should succinctly capture the location's performance, po
         response = client.models.generate_content(
             model="gemini-2.0-flash-lite",
             contents=prompt,
-            max_output_token=20
+            max_output_tokens=20
         )
         
         # Process the response
