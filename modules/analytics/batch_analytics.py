@@ -903,26 +903,54 @@ async def get_business_recommendations(db: AsyncSession, limit: int = 10, locati
         List of business recommendation records
     """
     try:
-        # Base query
-        query_text = """
-            SELECT 
-                id, 
-                timestamp, 
-                prompt, 
-                response, 
-                execution_time_ms
-            FROM 
-                llm_analytics
-            WHERE 
-                prompt LIKE '%Based on the following traffic data for location%'
-        """
-        
-        params = {"limit": limit}
-        
-        # Add location filter if provided
         if location_id:
-            query_text += " AND prompt LIKE :location_pattern"
-            params["location_pattern"] = f"%{location_id}%"
+            # First get the location address
+            location_query = text("""
+                SELECT address
+                FROM location
+                WHERE id = :location_id
+            """)
+            location_result = await db.execute(location_query, {"location_id": str(location_id)})
+            location = location_result.mappings().first()
+            
+            if not location:
+                # Location not found, return empty list
+                return []
+            
+            # Use the location address to filter recommendations
+            location_address = location["address"]
+            query_text = """
+                SELECT 
+                    id, 
+                    timestamp, 
+                    prompt, 
+                    response, 
+                    execution_time_ms
+                FROM 
+                    llm_analytics
+                WHERE 
+                    prompt LIKE '%Based on the following traffic data for location%'
+                    AND prompt LIKE :location_pattern
+            """
+            params = {
+                "limit": limit,
+                "location_pattern": f"%location \"{location_address}\"%"
+            }
+        else:
+            # Base query without location filter
+            query_text = """
+                SELECT 
+                    id, 
+                    timestamp, 
+                    prompt, 
+                    response, 
+                    execution_time_ms
+                FROM 
+                    llm_analytics
+                WHERE 
+                    prompt LIKE '%Based on the following traffic data for location%'
+            """
+            params = {"limit": limit}
         
         # Add ordering and limit
         query_text += " ORDER BY timestamp DESC LIMIT :limit"
@@ -957,13 +985,19 @@ async def get_business_recommendations(db: AsyncSession, limit: int = 10, locati
                         recs_list.append(clean_sentence + '.')
             
             # Format the record
-            recommendations.append({
+            rec = {
                 "id": record["id"],
                 "timestamp": record["timestamp"].isoformat(),
                 "location_address": location_address,
                 "recommendations": recs_list,
                 "execution_time_ms": record["execution_time_ms"]
-            })
+            }
+            
+            # Add location_id to the response if we're filtering by location
+            if location_id:
+                rec["location_id"] = location_id
+                
+            recommendations.append(rec)
         
         return recommendations
     except Exception as e:
