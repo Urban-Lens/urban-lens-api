@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError, jwt
@@ -56,26 +56,56 @@ async def send_password_reset_email(email: str, token: str):
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
-    login_data: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Login endpoint to get an access token"""
-    user = await AuthService.authenticate_user(db, login_data.email, login_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        # First try to get the body as json directly
+        try:
+            body = await request.json()
+            login_data = LoginRequest(**body)
+        except ValueError as e:
+            # If there's an issue parsing JSON, check if it might be a string format issue
+            raw_body = await request.body()
+            if isinstance(raw_body, bytes):
+                try:
+                    body_str = raw_body.decode('utf-8').strip()
+                    import json
+                    body = json.loads(body_str)
+                    login_data = LoginRequest(**body)
+                except (json.JSONDecodeError, UnicodeDecodeError) as json_err:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid JSON format: {str(json_err)}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid request body format: {str(e)}"
+                )
+        
+        # Continue with authentication
+        user = await AuthService.authenticate_user(db, login_data.email, login_data.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Create access token
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = AuthService.create_access_token(
+            data={"sub": str(user.id)},
+            expires_delta=access_token_expires
         )
-    
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = AuthService.create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=access_token_expires
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Login error: {str(e)}")
+        raise
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)

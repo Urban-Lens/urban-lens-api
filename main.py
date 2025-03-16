@@ -3,6 +3,8 @@ import logging
 from fastapi import FastAPI, Request, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 import time
 from contextlib import asynccontextmanager
@@ -149,7 +151,51 @@ app.add_middleware(TimingMiddleware)
 # Add request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
 
+# Add validation error handler before the general exception handler
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = []
+    for error in exc.errors():
+        # Make a copy of the error
+        error_copy = dict(error)
+        
+        # Handle bytes in input by decoding or converting to string representation
+        if 'input' in error_copy and isinstance(error_copy['input'], bytes):
+            try:
+                # Try to decode as utf-8 string
+                error_copy['input'] = error_copy['input'].decode('utf-8')
+            except UnicodeDecodeError:
+                # If can't decode, use string representation
+                error_copy['input'] = str(error_copy['input'])
+        errors.append(error_copy)
+    
+    logger.warning(f"Validation error: {errors}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors}
+    )
 
+# Also handle Pydantic validation errors
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    errors = []
+    for error in exc.errors():
+        # Make a copy of the error
+        error_copy = dict(error)
+        
+        # Handle bytes in input
+        if 'input' in error_copy and isinstance(error_copy['input'], bytes):
+            try:
+                error_copy['input'] = error_copy['input'].decode('utf-8')
+            except UnicodeDecodeError:
+                error_copy['input'] = str(error_copy['input'])
+        errors.append(error_copy)
+    
+    logger.warning(f"Pydantic validation error: {errors}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors}
+    )
 
 # Exception handler for unhandled exceptions
 @app.exception_handler(Exception)
