@@ -278,16 +278,20 @@ async def get_location_recommendation(
     Returns:
         Short string with generation
     """
-    
-    try:
-        recommendation = await generate_location_recommendations(
+    recommendation = await generate_location_recommendations(
             db=db,
             location_id=location_id,
             gemini_api_key=settings.GEMINI_API_KEY
         )
-    except Exception as e:
-        print(e)
-        return {
-            "error": "womp womp"
-        }
+    # try:
+    #     recommendation = await generate_location_recommendations(
+    #         db=db,
+    #         location_id=location_id,
+    #         gemini_api_key=settings.GEMINI_API_KEY
+    #     )
+    # except Exception as e:
+    #     print(e)
+    #     return {
+    #         "error": "womp womp"
+    #     }
     return recommendation
