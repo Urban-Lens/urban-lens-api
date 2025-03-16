@@ -63,4 +63,26 @@ class LocationService:
         """Delete a location"""
         location = await LocationService.get_location_by_id(db, location_id)
         await db.delete(location)
-        await db.commit() 
+        await db.commit()
+    
+    @staticmethod
+    async def attach_location_to_user(db: AsyncSession, location_id: uuid.UUID, user_id: uuid.UUID) -> Location:
+        """
+        Attach a location to a user by updating the user_id field
+        
+        Args:
+            db: Database session
+            location_id: ID of the location to attach
+            user_id: ID of the user to attach the location to
+            
+        Returns:
+            Updated location object
+        """
+        # Get the location
+        location = await LocationService.get_location_by_id(db, location_id)
+        
+        # Update the user_id
+        location_update = {"user_id": user_id}
+        updated_location = await Location.update(db, location.id, **location_update)
+        
+        return updated_location 

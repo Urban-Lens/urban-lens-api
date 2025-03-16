@@ -38,4 +38,14 @@ class LocationResponse(LocationBase):
     
     class Config:
         orm_mode = True
+        from_attributes = True
+
+class PublicLocationResponse(LocationBase):
+    """Schema for public location response data without user_id"""
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        orm_mode = True
         from_attributes = True 
