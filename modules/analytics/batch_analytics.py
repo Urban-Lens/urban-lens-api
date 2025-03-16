@@ -1233,7 +1233,7 @@ async def get_business_recommendations(db: AsyncSession, limit: int = 10, locati
         raise
 
 
-async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str, industry: str) -> Dict[str, Any]:
+async def generate_business_recommendation_summary(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str, industry: str) -> Dict[str, Any]:
     """
     Generate a business recommendation based on traffic metrics and image analysis for a specific location.
     

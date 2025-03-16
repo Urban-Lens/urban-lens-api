@@ -16,7 +16,8 @@ from modules.analytics.batch_analytics import (
     get_traffic_metrics,
     generate_business_recommendation,
     get_business_recommendations,
-    generate_location_recommendations
+    generate_location_recommendations,
+    generate_business_recommendation_summary
 )
 from api.auth import get_current_active_user
 
@@ -287,7 +288,7 @@ async def get_location_recommendation(
     return recommendation
 
 @router.get("/business-recommendation-summary")
-async def get_business_recommendation(
+async def get_business_recommendation_summary(
     location_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_active_user)
@@ -303,7 +304,7 @@ async def get_business_recommendation(
         Short string with generation
     """
     industry = current_user.industry if hasattr(current_user, 'industry') else None
-    recommendation = await generate_location_recommendations(
+    recommendation = await generate_business_recommendation_summary(
             db=db,
             location_id=location_id,
             gemini_api_key=settings.GEMINI_API_KEY,
