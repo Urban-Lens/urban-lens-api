@@ -220,6 +220,7 @@ async def create_business_recommendation(
 ):
     """
     Generate a business recommendation based on traffic metrics for a specific location.
+    Uses the current user's industry for more targeted recommendations.
     
     Parameters:
         - location_id: UUID of the location to generate recommendations for
@@ -227,10 +228,14 @@ async def create_business_recommendation(
     Returns:
         Business recommendation as a structured list
     """
+    # Get the user's industry if available
+    industry = current_user.industry if hasattr(current_user, 'industry') else None
+    
     recommendation = await generate_business_recommendation(
         db=db,
         location_id=location_id,
-        gemini_api_key=settings.GEMINI_API_KEY
+        gemini_api_key=settings.GEMINI_API_KEY,
+        industry=industry
     )
     return recommendation
 

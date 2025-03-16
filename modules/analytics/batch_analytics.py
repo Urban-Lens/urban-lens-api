@@ -746,7 +746,7 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
         logger.error(f"Error getting traffic metrics by location: {e}")
         raise
 
-async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str) -> Dict[str, Any]:
+async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str, industry: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate a business recommendation based on traffic metrics data for a specific location.
     
@@ -754,6 +754,7 @@ async def generate_business_recommendation(db: AsyncSession, location_id: uuid.U
         db: Database session
         location_id: Location ID to generate recommendation for
         gemini_api_key: Gemini API key
+        industry: Optional industry context for more targeted recommendations
         
     Returns:
         Dictionary with recommendation results
@@ -808,9 +809,11 @@ async def generate_business_recommendation(db: AsyncSession, location_id: uuid.U
                 "data_points": int(record["data_points"])
             })
         
-        # Create the prompt
+        # Create the prompt with industry context if available
+        industry_context = f" for the {industry} industry" if industry else ""
+        
         prompt = f"""
-Based on the following traffic data for location "{location['address']}", please provide recommendations for the best type and placement of physical marketing ads.
+Based on the following traffic data for location "{location['address']}", please provide recommendations for the best type and placement of physical marketing ads{industry_context}.
 
 The data represents hourly foot traffic (people count) and vehicle traffic (vehicle count) over time.
 
@@ -821,8 +824,9 @@ Based on this data:
 1. What's the best place to place a physical marketing ad?
 2. What type of ads would be most effective (digital, location-based, pop-up events, etc.)?
 3. When would be the best times to display these ads?
+{"4. How can these recommendations be tailored specifically for the " + industry + " industry?" if industry else ""}
 
-Please provide specific, actionable recommendations. Return your response as a list of short, concise recommendations, with one sentence per recommendation. Focus on practical marketing strategies based on the traffic patterns.
+Please provide specific, actionable recommendations. Return your response as a list of short, concise recommendations, with one sentence per recommendation. Focus on practical marketing strategies based on the traffic patterns{" that are relevant to the " + industry + " industry" if industry else ""}.
 """
         
         # Measure execution time
@@ -871,6 +875,7 @@ Please provide specific, actionable recommendations. Return your response as a l
             "location_id": location_id,
             "location_address": location["address"],
             "recommendations": recommendations,
+            "industry": industry,
             "recommendation_id": recommendation_id,
             "generated_at": datetime.utcnow().isoformat(),
             "execution_time_ms": execution_time_ms
