@@ -16,6 +16,7 @@ from database import get_db, init_db
 from api.users import router as users_router
 from api.auth import router as auth_router
 from api.locations import router as locations_router
+from api.analytics import router as analytics_router
 
 # Configure logging
 logging.basicConfig(
@@ -34,10 +35,22 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     await init_db()
     
+    # Initialize analytics scheduler if not in debug mode
+    if not settings.DEBUG:
+        from modules.analytics.scheduled_tasks import schedule_tasks, shutdown_tasks
+        logger.info("Initializing analytics scheduler...")
+        schedule_tasks()
+    
     yield
     
     # Shutdown
     logger.info("Application shutting down...")
+    
+    # Shutdown analytics scheduler if not in debug mode
+    if not settings.DEBUG:
+        from modules.analytics.scheduled_tasks import shutdown_tasks
+        logger.info("Shutting down analytics scheduler...")
+        shutdown_tasks()
 
 # Request processing time middleware
 class TimingMiddleware(BaseHTTPMiddleware):
@@ -104,6 +117,7 @@ app = FastAPI(
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(locations_router, prefix=settings.API_V1_STR)
+app.include_router(analytics_router, prefix=settings.API_V1_STR)
 
 # Set up CORS middleware
 if settings.BACKEND_CORS_ORIGINS:

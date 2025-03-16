@@ -73,7 +73,15 @@ class Settings(BaseSettings):
     GCP_CREDENTIALS_FILE: Optional[str] = None
     USE_GCS: bool = False  # Toggle for using Google Cloud Storage or local storage
     
- 
+    # Gemini API
+    GEMINI_API_KEY: str = "AIzaSyDkyJnz9_Os6pyg-pgnjhHbgyIMdnsbbNQ"  # Default key for development
+    
+    # AWS S3
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_REGION: str = "us-east-1"
+    S3_ANALYTICS_BUCKET: str = "intellibus-hackathon-bucket"  # Default bucket name
+    
     MAIL_FROM: Optional[str] = None
     FRONTEND_URL: Optional[str] = "http://localhost:3000"  # Default for development
     
