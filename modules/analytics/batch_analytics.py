@@ -403,8 +403,8 @@ async def get_traffic_metrics(
     Get traffic metrics from the timeseries_analytics table.
     
     Returns two types of metrics:
-    1. Totals: sum of people_ct and vehicle_ct
-    2. Time series: people_ct and vehicle_ct over time
+    1. Averages: average of people_ct and vehicle_ct across all data
+    2. Time series: people_ct and vehicle_ct over time, averaged when aggregated
     
     Args:
         db: Database session
@@ -415,7 +415,7 @@ async def get_traffic_metrics(
         time_aggregation: Time aggregation level (hour, day, or None for raw data)
         
     Returns:
-        Dictionary with totals and time series data
+        Dictionary with averages and time series data
     """
     try:
         # Base parameters
@@ -437,11 +437,11 @@ async def get_traffic_metrics(
             location_id_condition = "AND l.id = :location_id"
             params["location_id"] = str(location_id)
         
-        # Get totals with location join
-        totals_query = text(f"""
+        # Get averages with location join
+        averages_query = text(f"""
             SELECT 
-                SUM(ta.people_ct) AS total_people,
-                SUM(ta.vehicle_ct) AS total_vehicles,
+                AVG(ta.people_ct) AS avg_people,
+                AVG(ta.vehicle_ct) AS avg_vehicles,
                 COUNT(ta.id) AS total_records
             FROM timeseries_analytics ta
             LEFT JOIN location l ON ta.source_id = l.id::varchar
@@ -451,8 +451,8 @@ async def get_traffic_metrics(
                 {location_id_condition}
         """)
         
-        totals_result = await db.execute(totals_query, params)
-        totals = totals_result.mappings().first()
+        averages_result = await db.execute(averages_query, params)
+        averages = averages_result.mappings().first()
         
         # Time series data with location info and potential time aggregation
         time_select = ""
@@ -479,14 +479,17 @@ async def get_traffic_metrics(
         
         # Add aggregation for people and vehicles if needed
         if time_aggregation:
+            # Use AVG for hour and day aggregations
             base_query += """
-                SUM(ta.people_ct) as people_ct,
-                SUM(ta.vehicle_ct) as vehicle_ct
+                AVG(ta.people_ct) as people_ct,
+                AVG(ta.vehicle_ct) as vehicle_ct,
+                COUNT(*) as sample_count
             """
         else:
             base_query += """
                 ta.people_ct,
-                ta.vehicle_ct
+                ta.vehicle_ct,
+                1 as sample_count
             """
             
         # Complete the query
@@ -539,18 +542,19 @@ async def get_traffic_metrics(
         
         # Format the response
         return {
-            "totals": {
-                "total_people": int(totals["total_people"] or 0),
-                "total_vehicles": int(totals["total_vehicles"] or 0),
-                "total_records": int(totals["total_records"] or 0)
+            "averages": {
+                "avg_people": round(float(averages["avg_people"] or 0), 2),
+                "avg_vehicles": round(float(averages["avg_vehicles"] or 0), 2),
+                "total_records": int(averages["total_records"] or 0)
             },
             "timeseries": [
                 {
                     "timestamp": record["timestamp"].isoformat() if record["timestamp"] else None,
                     "source_id": record["source_id"],
                     "address": record["address"],
-                    "people_count": int(record["people_ct"] or 0),
-                    "vehicle_count": int(record["vehicle_ct"] or 0)
+                    "people_count": round(float(record["people_ct"] or 0), 2),
+                    "vehicle_count": round(float(record["vehicle_ct"] or 0), 2),
+                    "sample_count": int(record["sample_count"] or 0)
                 } 
                 for record in timeseries_data
             ],
