@@ -15,7 +15,8 @@ from modules.analytics.batch_analytics import (
     get_llm_analytics,
     get_traffic_metrics,
     generate_business_recommendation,
-    get_business_recommendations
+    get_business_recommendations,
+    generate_location_recommendations
 )
 from api.auth import get_current_active_user
 
