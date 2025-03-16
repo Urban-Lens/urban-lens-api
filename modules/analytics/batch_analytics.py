@@ -489,13 +489,13 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
         logger.error(f"Error getting traffic metrics: {e}")
         raise
 
-async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optional[uuid.UUID] = None, address_filter: Optional[str] = None, skip: int = 0, limit: int = 100) -> Dict[str, Any]:
+async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optional[uuid.UUID] = None, address_filter: Optional[str] = None, skip: int = 0, limit: int = None) -> Dict[str, Any]:
     """
     Get traffic metrics from the timeseries_analytics table grouped by location.
     
     Returns:
     1. Totals by location: sum of people_ct and vehicle_ct for each location
-    2. Time series by location: people_ct and vehicle_ct over time for each location
+    2. Time series by location: people_ct and vehicle_ct over time for each location ordered by latest timestamp
     3. Location details: address, latitude, longitude, etc.
     
     Args:
@@ -503,7 +503,7 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
         location_id: Optional UUID to filter by specific location
         address_filter: Optional filter by location address (partial match)
         skip: Number of records to skip for pagination
-        limit: Maximum number of records to return
+        limit: Maximum number of records to return (None for unlimited)
         
     Returns:
         Dictionary with locations data containing metrics
@@ -512,7 +512,11 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
         # Base location filter condition
         location_filter = ""
         address_condition = ""
-        params = {"skip": skip, "limit": limit}
+        params = {"skip": skip}
+        
+        # Set limit if provided
+        if limit is not None:
+            params["limit"] = limit
         
         if location_id:
             location_filter = "AND l.id = :location_id"
@@ -536,7 +540,8 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
                 l.thumbnail,
                 COUNT(ta.id) AS total_records,
                 SUM(ta.people_ct) AS total_people,
-                SUM(ta.vehicle_ct) AS total_vehicles
+                SUM(ta.vehicle_ct) AS total_vehicles,
+                MAX(ta.timestamp) AS latest_timestamp
             FROM 
                 location l
             LEFT JOIN 
@@ -548,8 +553,9 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
             GROUP BY 
                 l.id
             ORDER BY 
-                l.address
-            LIMIT :limit OFFSET :skip
+                MAX(ta.timestamp) DESC NULLS LAST
+            {f"LIMIT :limit" if limit is not None else ""}
+            {f"OFFSET :skip" if skip > 0 else ""}
         """)
         
         locations_result = await db.execute(locations_query, params)
@@ -589,7 +595,7 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
                     source_id = :source_id
                     AND (people_ct IS NOT NULL OR vehicle_ct IS NOT NULL)
                 ORDER BY 
-                    timestamp
+                    timestamp DESC
             """)
             
             timeseries_result = await db.execute(timeseries_query, {"source_id": location_id_str})
@@ -616,6 +622,7 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
                 "input_stream_url": location["input_stream_url"],
                 "output_stream_url": location["output_stream_url"],
                 "thumbnail": location["thumbnail"],
+                "latest_timestamp": location["latest_timestamp"].isoformat() if location["latest_timestamp"] else None,
                 "metrics": {
                     "total_people": int(location["total_people"] or 0),
                     "total_vehicles": int(location["total_vehicles"] or 0),
