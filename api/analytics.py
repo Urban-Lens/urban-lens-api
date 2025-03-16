@@ -13,7 +13,9 @@ from modules.analytics.batch_analytics import (
     get_hourly_images, 
     run_llm_analysis,
     get_llm_analytics,
-    get_traffic_metrics
+    get_traffic_metrics,
+    generate_business_recommendation,
+    get_business_recommendations
 )
 from api.auth import get_current_active_user
 
@@ -208,4 +210,50 @@ async def get_metrics(
         location_id, 
         time_aggregation
     )
-    return metrics 
+    return metrics
+
+@router.post("/business-recommendation")
+async def create_business_recommendation(
+    location_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """
+    Generate a business recommendation based on traffic metrics for a specific location.
+    
+    Parameters:
+        - location_id: UUID of the location to generate recommendations for
+    
+    Returns:
+        Business recommendation as a structured list
+    """
+    recommendation = await generate_business_recommendation(
+        db=db,
+        location_id=location_id,
+        gemini_api_key=settings.GEMINI_API_KEY
+    )
+    return recommendation
+
+@router.get("/business-recommendation")
+async def get_business_recommendation(
+    limit: int = Query(10, description="Maximum number of recommendations to return"),
+    location_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """
+    Get business recommendations from the database.
+    
+    Parameters:
+        - limit: Maximum number of recommendations to return
+        - location_id: Optional UUID to filter recommendations by location
+    
+    Returns:
+        List of business recommendations
+    """
+    recommendations = await get_business_recommendations(
+        db=db,
+        limit=limit,
+        location_id=location_id
+    )
+    return recommendations 

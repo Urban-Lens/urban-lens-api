@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 import uuid
+import json
+import re
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -742,4 +744,219 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
         }
     except Exception as e:
         logger.error(f"Error getting traffic metrics by location: {e}")
+        raise
+
+async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str) -> Dict[str, Any]:
+    """
+    Generate a business recommendation based on traffic metrics data for a specific location.
+    
+    Args:
+        db: Database session
+        location_id: Location ID to generate recommendation for
+        gemini_api_key: Gemini API key
+        
+    Returns:
+        Dictionary with recommendation results
+    """
+    try:
+        # Get location information
+        location_query = text("""
+            SELECT id, address
+            FROM location
+            WHERE id = :location_id
+        """)
+        
+        location_result = await db.execute(location_query, {"location_id": str(location_id)})
+        location = location_result.mappings().first()
+        
+        if not location:
+            raise ValueError(f"Location with ID {location_id} not found")
+        
+        # Get hourly aggregated data for the location
+        hourly_data_query = text("""
+            SELECT 
+                date_trunc('hour', timestamp) as hour,
+                SUM(people_ct) as total_people,
+                SUM(vehicle_ct) as total_vehicles,
+                COUNT(*) as data_points
+            FROM 
+                timeseries_analytics
+            WHERE 
+                source_id = :location_id
+                AND people_ct IS NOT NULL 
+                AND vehicle_ct IS NOT NULL
+            GROUP BY 
+                date_trunc('hour', timestamp)
+            ORDER BY 
+                hour DESC
+            LIMIT 168  -- Last 7 days of hourly data
+        """)
+        
+        hourly_result = await db.execute(hourly_data_query, {"location_id": str(location_id)})
+        hourly_data = hourly_result.mappings().all()
+        
+        if not hourly_data:
+            raise ValueError(f"No traffic data found for location {location_id}")
+        
+        # Format the data for the LLM
+        formatted_data = []
+        for record in hourly_data:
+            formatted_data.append({
+                "hour": record["hour"].isoformat(),
+                "total_people": int(record["total_people"] or 0),
+                "total_vehicles": int(record["total_vehicles"] or 0),
+                "data_points": int(record["data_points"])
+            })
+        
+        # Create the prompt
+        prompt = f"""
+Based on the following traffic data for location "{location['address']}", please provide recommendations for the best type and placement of physical marketing ads.
+
+The data represents hourly foot traffic (people count) and vehicle traffic (vehicle count) over time.
+
+Data:
+{json.dumps(formatted_data, indent=2)}
+
+Based on this data:
+1. What's the best place to place a physical marketing ad?
+2. What type of ads would be most effective (digital, location-based, pop-up events, etc.)?
+3. When would be the best times to display these ads?
+
+Please provide specific, actionable recommendations. Return your response as a list of short, concise recommendations, with one sentence per recommendation. Focus on practical marketing strategies based on the traffic patterns.
+"""
+        
+        # Measure execution time
+        start_time = time.time()
+        
+        # Get recommendation from Gemini
+        client = genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=prompt
+        )
+        
+        # Process the recommendation
+        recommendation_text = response.text
+        
+        # Calculate execution time in milliseconds
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Extract recommendations as a list
+        recommendations = []
+        for line in recommendation_text.strip().split('\n'):
+            # Keep only lines that look like list items
+            line = line.strip()
+            if line and (line.startswith('-') or line.startswith('*') or bool(re.match(r'^\d+\.', line))):
+                # Remove list markers and clean
+                clean_line = re.sub(r'^[-*\d\.]+\s*', '', line).strip()
+                if clean_line:
+                    recommendations.append(clean_line)
+        
+        # If the LLM didn't format as a list, try to split by periods
+        if not recommendations:
+            for sentence in recommendation_text.split('.'):
+                clean_sentence = sentence.strip()
+                if clean_sentence:
+                    recommendations.append(clean_sentence + '.')
+        
+        # Store the recommendation in the LLM analytics table
+        recommendation_id = await store_llm_analytics(
+            db=db, 
+            prompt=prompt, 
+            response=recommendation_text, 
+            execution_time_ms=execution_time_ms
+        )
+        
+        result = {
+            "location_id": location_id,
+            "location_address": location["address"],
+            "recommendations": recommendations,
+            "recommendation_id": recommendation_id,
+            "generated_at": datetime.utcnow().isoformat(),
+            "execution_time_ms": execution_time_ms
+        }
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error generating business recommendation: {e}")
+        raise
+
+async def get_business_recommendations(db: AsyncSession, limit: int = 10, location_id: Optional[uuid.UUID] = None) -> List[Dict[str, Any]]:
+    """
+    Get business recommendations from the LLM analytics table.
+    
+    Args:
+        db: Database session
+        limit: Maximum number of records to return
+        location_id: Optional location ID to filter by
+        
+    Returns:
+        List of business recommendation records
+    """
+    try:
+        # Base query
+        query_text = """
+            SELECT 
+                id, 
+                timestamp, 
+                prompt, 
+                response, 
+                execution_time_ms
+            FROM 
+                llm_analytics
+            WHERE 
+                prompt LIKE '%Based on the following traffic data for location%'
+        """
+        
+        params = {"limit": limit}
+        
+        # Add location filter if provided
+        if location_id:
+            query_text += " AND prompt LIKE :location_pattern"
+            params["location_pattern"] = f"%{location_id}%"
+        
+        # Add ordering and limit
+        query_text += " ORDER BY timestamp DESC LIMIT :limit"
+        
+        # Execute the query
+        query = text(query_text)
+        result = await db.execute(query, params)
+        records = result.mappings().all()
+        
+        recommendations = []
+        for record in records:
+            # Try to extract the location info from the prompt
+            location_match = re.search(r'location "([^"]+)"', record["prompt"])
+            location_address = location_match.group(1) if location_match else "Unknown location"
+            
+            # Extract recommendations from the response
+            recommendation_text = record["response"]
+            recs_list = []
+            
+            for line in recommendation_text.strip().split('\n'):
+                line = line.strip()
+                if line and (line.startswith('-') or line.startswith('*') or bool(re.match(r'^\d+\.', line))):
+                    clean_line = re.sub(r'^[-*\d\.]+\s*', '', line).strip()
+                    if clean_line:
+                        recs_list.append(clean_line)
+            
+            # If no list items were found, try to split by periods
+            if not recs_list:
+                for sentence in recommendation_text.split('.'):
+                    clean_sentence = sentence.strip()
+                    if clean_sentence:
+                        recs_list.append(clean_sentence + '.')
+            
+            # Format the record
+            recommendations.append({
+                "id": record["id"],
+                "timestamp": record["timestamp"].isoformat(),
+                "location_address": location_address,
+                "recommendations": recs_list,
+                "execution_time_ms": record["execution_time_ms"]
+            })
+        
+        return recommendations
+    except Exception as e:
+        logger.error(f"Error retrieving business recommendations: {e}")
         raise
