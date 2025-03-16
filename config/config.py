@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = ""  # Default value for development
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     
     # File Storage
     UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")

@@ -10,10 +10,11 @@ class LocationService:
     """Service for handling location-related operations"""
     
     @staticmethod
-    async def create_location(db: AsyncSession, location_data: LocationCreate, user_id: uuid.UUID) -> Location:
+    async def create_location(db: AsyncSession, location_data: LocationCreate, user_id: Optional[uuid.UUID] = None) -> Location:
         """Create a new location"""
         location_dict = location_data.dict()
-        location_dict["user_id"] = user_id
+        if user_id:
+            location_dict["user_id"] = user_id
         location = await Location.create(db, **location_dict)
         return location
     

@@ -32,7 +32,7 @@ class LocationUpdate(BaseModel):
 class LocationResponse(LocationBase):
     """Schema for location response data"""
     id: uuid.UUID
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     

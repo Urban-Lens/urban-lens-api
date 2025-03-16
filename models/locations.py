@@ -25,7 +25,7 @@ class Location(BaseModel, Base):
     thumbnail = Column(String(255), nullable=True)
     
     # Relationship with User
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=True)
     user = relationship("User", back_populates="locations")
     
     @classmethod
