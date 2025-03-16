@@ -262,3 +262,32 @@ async def get_business_recommendation(
         location_id=location_id
     )
     return recommendations 
+
+@router.get("/location-recommendation-summary")
+async def get_location_recommendation(
+    location_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """
+    Generate a summary recommendation of the location using an LLM processor
+    
+    Parameters:
+        - location_id: UUID of the location to generate recommendations for
+    
+    Returns:
+        Short string with generation
+    """
+    
+    try:
+        recommendation = await generate_location_recommendations(
+            db=db,
+            location_id=location_id,
+            gemini_api_key=settings.GEMINI_API_KEY
+        )
+    except Exception as e:
+        print(e)
+        return {
+            "error": "womp womp"
+        }
+    return recommendation

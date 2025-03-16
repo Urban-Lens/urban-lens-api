@@ -750,6 +750,234 @@ async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optiona
         logger.error(f"Error getting traffic metrics by location: {e}")
         raise
 
+async def generate_location_recommendations(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str) -> Dict[str, Any]:
+    """
+    Generate location recommendations by comparing traffic metrics of a specific location against others.
+    
+    Args:
+        db: Database session
+        location_id: Location ID to evaluate
+        gemini_api_key: Gemini API key
+        
+    Returns:
+        Dictionary with location evaluation and recommendations
+    """
+    try:
+        # Get the target location information
+        location_query = text("""
+            SELECT id, address
+            FROM location
+            WHERE id = :location_id
+        """)
+        
+        location_result = await db.execute(location_query, {"location_id": str(location_id)})
+        location = location_result.mappings().first()
+        
+        if not location:
+            raise ValueError(f"Location with ID {location_id} not found")
+        
+        # Get hourly aggregated data for all locations with the target location marked
+        all_locations_query = text("""
+            WITH hourly_metrics AS (
+                SELECT 
+                    source_id,
+                    l.address,
+                    date_trunc('hour', timestamp) as hour,
+                    AVG(people_ct) as avg_people,
+                    AVG(vehicle_ct) as avg_vehicles,
+                    COUNT(*) as data_points
+                FROM 
+                    timeseries_analytics ta
+                JOIN
+                    location l ON ta.source_id = l.id::text
+                WHERE 
+                    people_ct IS NOT NULL 
+                    AND vehicle_ct IS NOT NULL
+                GROUP BY 
+                    source_id, l.address, date_trunc('hour', timestamp)
+            ),
+            location_summaries AS (
+                SELECT
+                    source_id,
+                    address,
+                    AVG(avg_people) as avg_people_per_hour,
+                    MAX(avg_people) as peak_people,
+                    AVG(avg_vehicles) as avg_vehicles_per_hour,
+                    MAX(avg_vehicles) as peak_vehicles,
+                    COUNT(*) as hours_with_data,
+                    (source_id = :location_id) as is_target
+                FROM
+                    hourly_metrics
+                GROUP BY
+                    source_id, address
+            )
+            SELECT * FROM location_summaries
+            ORDER BY avg_people_per_hour DESC, avg_vehicles_per_hour DESC
+        """)
+        
+        all_locations_result = await db.execute(all_locations_query, {"location_id": str(location_id)})
+        all_locations_data = all_locations_result.mappings().all()
+        
+        if not all_locations_data:
+            raise ValueError("No traffic data found for any locations")
+            
+        # Find detailed data for our target location
+        target_location_data = None
+        location_rankings = {}
+        total_locations = len(all_locations_data)
+        
+        for i, loc in enumerate(all_locations_data):
+            if loc["is_target"]:
+                target_location_data = dict(loc)
+                # Calculate rankings (1-based)
+                location_rankings = {
+                    "people_rank": i + 1,
+                    "people_percentile": round(100 * (total_locations - i) / total_locations),
+                    "total_locations": total_locations
+                }
+                break
+                
+        if not target_location_data:
+            raise ValueError(f"Target location with ID {location_id} not found in traffic data")
+        
+        # Get hourly data for the target location for time-based analysis
+        target_hourly_query = text("""
+            SELECT 
+                date_trunc('hour', timestamp) as hour,
+                AVG(people_ct) as avg_people,
+                AVG(vehicle_ct) as avg_vehicles,
+                COUNT(*) as data_points
+            FROM 
+                timeseries_analytics
+            WHERE 
+                source_id = :location_id
+                AND people_ct IS NOT NULL 
+                AND vehicle_ct IS NOT NULL
+            GROUP BY 
+                date_trunc('hour', timestamp)
+            ORDER BY 
+                hour DESC
+            LIMIT 168  -- Last 7 days of hourly data
+        """)
+        
+        target_hourly_result = await db.execute(target_hourly_query, {"location_id": str(location_id)})
+        target_hourly_data = target_hourly_result.mappings().all()
+        
+        # Prepare data for the prompt
+        location_comparison = []
+        for loc in all_locations_data:
+            comparison_entry = {
+                "address": loc["address"],
+                "avg_people_per_hour": round(float(loc["avg_people_per_hour"] or 0), 2),
+                "avg_vehicles_per_hour": round(float(loc["avg_vehicles_per_hour"] or 0), 2),
+                "peak_people": round(float(loc["peak_people"] or 0), 2),
+                "peak_vehicles": round(float(loc["peak_vehicles"] or 0), 2),
+                "is_target_location": loc["is_target"]
+            }
+            location_comparison.append(comparison_entry)
+            
+        target_hourly_formatted = []
+        for record in target_hourly_data:
+            target_hourly_formatted.append({
+                "hour": record["hour"].isoformat(),
+                "avg_people": round(float(record["avg_people"] or 0), 2),
+                "avg_vehicles": round(float(record["avg_vehicles"] or 0), 2),
+                "data_points": int(record["data_points"])
+            })
+        
+        # Create the prompt
+        prompt = f"""
+I need you to evaluate the location at "{target_location_data['address']}" compared to other locations based on traffic data.
+
+Here's how this location ranks among {total_locations} total locations:
+- Ranked #{location_rankings['people_rank']} for average foot traffic
+- In the {location_rankings['people_percentile']}th percentile for foot traffic
+
+Comparison of all locations (with target location marked):
+{json.dumps(location_comparison, indent=2)}
+
+Hourly data for the target location over the past week:
+{json.dumps(target_hourly_formatted, indent=2)}
+
+Based on this data, please provide three brief terms or phrases (separated by commas) that evaluate this location compared to others
+For example: `positive, room for growth, compares favorably with other locations` or `neutral, high vehicular traffic, recommend billboards`
+
+Based on the split of foot vs pedestrian traffic you can recommend a type of physical advertisement that could be used for the location.
+
+The three terms/phrases should succinctly capture the location's performance, potential, and distinctive characteristics compared to other locations.
+"""
+        
+        # Measure execution time
+        start_time = time.time()
+        
+        # Get recommendation from Gemini
+        client = genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=prompt,
+            max_output_token=20
+        )
+        
+        # Process the response
+        full_response = response.text
+        
+        # Calculate execution time in milliseconds
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        # Parse the response - Extract the three terms/phrases
+        evaluation_terms = ""
+        paragraph = ""
+        recommendation = ""
+        
+        # Simple parsing approach
+        lines = full_response.strip().split('\n')
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if i == 0 and (',' in line or ':' in line):
+                # First line with commas is likely the terms
+                evaluation_terms = line.strip()
+                if ':' in evaluation_terms and ',' in evaluation_terms:
+                    evaluation_terms = evaluation_terms.split(':', 1)[1].strip()
+            elif paragraph == "" and len(line) > 50:
+                # First substantial paragraph
+                paragraph = line.strip()
+            elif paragraph != "" and recommendation == "" and line and not line.startswith('-') and len(line) > 20:
+                # First line after paragraph that's not a bullet point
+                recommendation = line.strip()
+                
+        # If parsing didn't work well, use regex to find the three terms
+        if not evaluation_terms or len(evaluation_terms.split(',')) != 3:
+            # Look for patterns like "1. term1, term2, term3" or "terms: term1, term2, term3"
+            terms_match = re.search(r'(?:terms?:?\s*)([\w\s-]+,\s*[\w\s-]+,\s*[\w\s-]+)', full_response, re.IGNORECASE)
+            if terms_match:
+                evaluation_terms = terms_match.group(1).strip()
+        
+        # Store the recommendation in the LLM analytics table
+        recommendation_id = await store_llm_analytics(
+            db=db, 
+            prompt=prompt, 
+            response=full_response, 
+            execution_time_ms=execution_time_ms
+        )
+        
+        result = {
+            "location_id": location_id,
+            "location_address": location["address"],
+            "evaluation_terms": evaluation_terms,
+            "comparison_paragraph": paragraph,
+            "recommendation": recommendation,
+            "ranking": location_rankings,
+            "full_response": full_response,
+            "recommendation_id": recommendation_id,
+            "generated_at": datetime.utcnow().isoformat(),
+            "execution_time_ms": execution_time_ms
+        }
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error generating location recommendations: {e}")
+        raise
+
 async def generate_business_recommendation(db: AsyncSession, location_id: uuid.UUID, gemini_api_key: str, industry: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate a business recommendation based on traffic metrics data for a specific location.
@@ -839,7 +1067,7 @@ Please provide specific, actionable recommendations. Return your response as a l
         # Get recommendation from Gemini
         client = genai.Client(api_key=gemini_api_key)
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-2.0-flash-lite",
             contents=prompt
         )
         
