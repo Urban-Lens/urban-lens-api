@@ -18,10 +18,24 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 # Hard-coded prompt for LLM analysis
-LLM_ANALYSIS_PROMPT = """give a stuctured analysis based on the traffic image 
+LLM_ANALYSIS_PROMPT = """Provide a purely objective, fact-based structured analysis of the traffic image with no personal opinions or bias.
 
-analyse the image to look at the type of vehicles, also i want to get some inference on the overall income based on the vehicles, also analyze foot traffic and so on give insights in to whether it's a busy area or not 
-etc"""
+Analyze:
+1. Vehicle types and counts visible in the image
+2. Objective inferences about the socioeconomic characteristics based solely on vehicle types present
+3. Pedestrian/foot traffic patterns and density
+4. Level of activity/busyness in the area
+5. Any notable infrastructure or environmental elements
+
+Your response MUST:
+- Be properly formatted with clear sections and bullet points
+- Include only observable facts from the image
+- Avoid subjective interpretations or personal opinions
+- Present quantitative data when available
+- Include a structured summary at the end
+
+This is for an analytics engine, so maintain a professional, analytical tone throughout.
+"""
 
 async def get_hourly_images(db: AsyncSession, hour_timestamp: datetime = None) -> List[Dict[str, Any]]:
     """
@@ -204,10 +218,24 @@ async def process_hourly_traffic_images(db: AsyncSession, gemini_api_key: str, t
         
         # Set up the prompt for traffic analysis
         analysis_prompt = (
-            """give a stuctured analysis based on the traffic image 
+            """Provide a purely objective, fact-based structured analysis of the traffic image with no personal opinions or bias.
 
-analyse the image to look at the type of vehicles, also i want to get some inference on the overall income based on the vehicles, also analyze foot traffic and so on give insights in to whether it's a busy area or not 
-etc"""
+Analyze:
+1. Vehicle types and counts visible in the image
+2. Objective inferences about the socioeconomic characteristics based solely on vehicle types present
+3. Pedestrian/foot traffic patterns and density
+4. Level of activity/busyness in the area
+5. Any notable infrastructure or environmental elements
+
+Your response MUST:
+- Be properly formatted with clear sections and bullet points
+- Include only observable facts from the image
+- Avoid subjective interpretations or personal opinions
+- Present quantitative data when available
+- Include a structured summary at the end
+
+This is for an analytics engine, so maintain a professional, analytical tone throughout.
+"""
         )
         
         # Analyze the image
