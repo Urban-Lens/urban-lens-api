@@ -2,7 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict, Any, Optional, uuid
+from typing import List, Dict, Any, Optional
+import uuid
 from datetime import datetime, timedelta
 
 from database import get_db
