@@ -905,6 +905,7 @@ For example: `positive, room for growth, compares favorably with other locations
 Based on the split of foot vs pedestrian traffic you can recommend a type of physical advertisement that could be used for the location.
 
 The three terms/phrases should succinctly capture the location's performance, potential, and distinctive characteristics compared to other locations.
+At most, your response should be 20 tokens
 """
         
         # Measure execution time
@@ -914,8 +915,7 @@ The three terms/phrases should succinctly capture the location's performance, po
         client = genai.Client(api_key=gemini_api_key)
         response = client.models.generate_content(
             model="gemini-2.0-flash-lite",
-            contents=prompt,
-            max_output_tokens=20
+            contents=prompt
         )
         
         # Process the response
