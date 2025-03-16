@@ -39,13 +39,13 @@ def test_user_endpoints():
         # Test user login (POST /api/v1/auth/login)
         print(f"- Logging in as user: {user_data['email']}")
         login_data = {
-            "username": user_data["email"],
+            "email": user_data["email"],
             "password": user_data["password"]
         }
         response = requests.post(
             f"{API_URL}/auth/login", 
-            data=login_data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
+            json=login_data,
+            headers={"Content-Type": "application/json"}
         )
         print(f"  Status: {response.status_code}")
         

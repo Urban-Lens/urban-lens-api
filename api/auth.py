@@ -2,11 +2,14 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
 
 from database import get_db
 from config.config import settings
 from modules.auth.auth_service import AuthService
-from modules.auth.schema import Token, PasswordResetRequest, PasswordResetConfirm, ChangePasswordRequest
+from modules.auth.schema import Token, PasswordResetRequest, PasswordResetConfirm, ChangePasswordRequest, LoginRequest
 from modules.users.schema import UserResponse
 
 
@@ -15,8 +18,9 @@ router = APIRouter(
     tags=["authentication"],
 )
 
-# OAuth2 password bearer for token authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+# Configure OAuth2 with the login endpoint URL
+# We still support form-based auth for compatibility with tools like swagger UI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login/form")
 
 
 # Dependency to get the current user
@@ -52,11 +56,11 @@ async def send_password_reset_email(email: str, token: str):
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Login endpoint to get an access token"""
-    user = await AuthService.authenticate_user(db, form_data.username, form_data.password)
+    user = await AuthService.authenticate_user(db, login_data.email, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -141,4 +145,29 @@ async def read_users_me(
     current_user = Depends(get_current_active_user)
 ):
     """Get information about the currently authenticated user"""
-    return current_user 
+    return current_user
+
+
+# Add an additional form-based login endpoint for compatibility
+@router.post("/login/form", include_in_schema=False)
+async def login_with_form(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    """Form-based login endpoint for OAuth2 compatibility (e.g., for Swagger UI)"""
+    user = await AuthService.authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = AuthService.create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"} 

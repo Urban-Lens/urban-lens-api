@@ -15,19 +15,18 @@ def test_login():
     if not AUTH_DATA["user_id"]:
         test_register_user()
     
-    # Login with the test user
+    # Login with the test user using the new JSON format
     login_data = {
-        "username": TEST_USER["email"],  # OAuth2 flow uses 'username' for the email
+        "email": TEST_USER["email"],
         "password": TEST_USER["password"]
     }
     
-    # Use proper form urlencoded for OAuth2 login
-    # Create custom headers for form data
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    # Use JSON content type for the new login endpoint
+    headers = {"Content-Type": "application/json"}
     
-    # Make direct request since our utility doesn't handle form data well
+    # Make direct request
     url = f"{AUTH_DATA['api_url']}/auth/login"
-    response = requests.post(url, data=login_data, headers=headers)
+    response = requests.post(url, json=login_data, headers=headers)
     
     status_code = response.status_code
     print(f"Login response status: {status_code}")
@@ -52,16 +51,16 @@ def test_login_invalid_credentials():
     """Test login with invalid credentials"""
     # Login with invalid credentials
     login_data = {
-        "username": TEST_USER["email"],
+        "email": TEST_USER["email"],
         "password": "wrong_password"
     }
     
-    # Use proper form urlencoded for OAuth2 login
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    # Use JSON for the request
+    headers = {"Content-Type": "application/json"}
     
     # Make direct request
     url = f"{AUTH_DATA['api_url']}/auth/login"
-    response = requests.post(url, data=login_data, headers=headers)
+    response = requests.post(url, json=login_data, headers=headers)
     
     status_code = response.status_code
     print(f"Invalid login response status: {status_code}")
@@ -177,6 +176,40 @@ def test_change_password():
         print(f"Successfully changed password for user: {TEST_USER['email']}")
 
 
+def test_login_form_compatibility():
+    """Test form-based login endpoint (for OAuth2 compatibility)"""
+    # First ensure we have a registered user
+    if not AUTH_DATA["user_id"]:
+        test_register_user()
+    
+    # Login with the test user using the OAuth2 form format
+    login_data = {
+        "username": TEST_USER["email"],  # OAuth2 flow uses 'username' for the email
+        "password": TEST_USER["password"]
+    }
+    
+    # Use proper form urlencoded for OAuth2 login
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    
+    # Make direct request to the form-based endpoint
+    url = f"{AUTH_DATA['api_url']}/auth/login/form"
+    response = requests.post(url, data=login_data, headers=headers)
+    
+    status_code = response.status_code
+    print(f"Form login response status: {status_code}")
+    print(f"Form login response: {response.text}")
+    
+    assert status_code == 200, f"Expected status 200, got {status_code}"
+    
+    response_data = response.json()
+    assert "access_token" in response_data, "Access token not found in response"
+    assert "token_type" in response_data, "Token type not found in response"
+    assert response_data["token_type"].lower() == "bearer", f"Unexpected token type: {response_data['token_type']}"
+    
+    print(f"Successfully logged in via form with user: {TEST_USER['email']}")
+    return response_data
+
+
 def run_auth_tests():
     """Run all authentication tests in sequence"""
     # Start with a clean slate
@@ -189,6 +222,7 @@ def run_auth_tests():
     try:
         test_register_user()
         test_login()
+        test_login_form_compatibility()  # Test the form-based login
         test_get_me()
         test_forgot_password()
         test_reset_password()
