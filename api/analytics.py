@@ -173,14 +173,23 @@ async def get_llm_analysis_data(
 
 @router.get("/metrics")
 async def get_metrics(
+    skip: int = 0,
+    limit: Optional[int] = None,
+    address_filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get traffic metrics from the timeseries_analytics table.
     
+    Parameters:
+        - skip: Number of records to skip (for pagination)
+        - limit: Maximum number of records to return (None for unlimited)
+        - address_filter: Filter by location address (partial match)
+    
     Returns:
         - totals: sum of people_ct and vehicle_ct
-        - timeseries: people_ct and vehicle_ct over time
+        - timeseries: people_ct and vehicle_ct over time, ordered by latest timestamp
+        - pagination: metadata for pagination
     """
-    metrics = await get_traffic_metrics(db)
+    metrics = await get_traffic_metrics(db, skip, limit, address_filter)
     return metrics 

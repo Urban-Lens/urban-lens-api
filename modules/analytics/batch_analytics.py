@@ -389,7 +389,7 @@ async def run_llm_analysis(db: AsyncSession, gemini_api_key: str) -> Dict[str, A
         "execution_time_ms": execution_time_ms
     }
 
-async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100, address_filter: Optional[str] = None) -> Dict[str, Any]:
+async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None, address_filter: Optional[str] = None) -> Dict[str, Any]:
     """
     Get traffic metrics from the timeseries_analytics table.
     
@@ -400,7 +400,7 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
     Args:
         db: Database session
         skip: Number of records to skip for pagination
-        limit: Maximum number of records to return
+        limit: Maximum number of records to return (None for unlimited)
         address_filter: Optional filter by location address (partial match)
         
     Returns:
@@ -408,8 +408,12 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
     """
     try:
         # Base parameters
-        params = {"skip": skip, "limit": limit}
+        params = {"skip": skip}
         address_condition = ""
+        
+        # Set limit if provided
+        if limit is not None:
+            params["limit"] = limit
         
         # Add address filter if provided
         if address_filter:
@@ -425,7 +429,8 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
             FROM timeseries_analytics ta
             LEFT JOIN location l ON ta.source_id = l.id::varchar
             WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
-            {address_condition}
+                AND (l.address IS NOT NULL)
+                {address_condition}
         """)
         
         totals_result = await db.execute(totals_query, params)
@@ -442,9 +447,11 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
             FROM timeseries_analytics ta
             LEFT JOIN location l ON ta.source_id = l.id::varchar
             WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
-            {address_condition}
-            ORDER BY ta.timestamp
-            LIMIT :limit OFFSET :skip
+                AND (l.address IS NOT NULL)
+                {address_condition}
+            ORDER BY ta.timestamp DESC
+            {f"LIMIT :limit" if limit is not None else ""}
+            {f"OFFSET :skip" if skip > 0 else ""}
         """)
         
         timeseries_result = await db.execute(timeseries_query, params)
@@ -456,7 +463,8 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = 100,
             FROM timeseries_analytics ta
             LEFT JOIN location l ON ta.source_id = l.id::varchar
             WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
-            {address_condition}
+                AND (l.address IS NOT NULL)
+                {address_condition}
         """)
         
         count_result = await db.execute(count_query, params)
