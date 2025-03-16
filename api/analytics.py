@@ -7,7 +7,13 @@ from datetime import datetime, timedelta
 
 from database import get_db
 from config.config import settings
-from modules.analytics.batch_analytics import process_hourly_traffic_images, get_hourly_images
+from modules.analytics.batch_analytics import (
+    process_hourly_traffic_images, 
+    get_hourly_images, 
+    run_llm_analysis,
+    get_llm_analytics,
+    get_traffic_metrics
+)
 from api.auth import get_current_active_user
 
 router = APIRouter(
@@ -131,4 +137,50 @@ async def get_traffic_sources(
     result = await db.execute(query)
     sources = [row[0] for row in result.fetchall()]
     
-    return {"sources": sources} 
+    return {"sources": sources}
+
+@router.post("/llm-analysis", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_llm_analysis(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Trigger LLM analysis with a hard-coded prompt.
+    This is an asynchronous operation - it returns immediately but processing continues in the background.
+    """
+    # Start the processing in the background
+    async def process_in_background():
+        await run_llm_analysis(db=db, gemini_api_key=settings.GEMINI_API_KEY)
+    
+    # Schedule the background task
+    import asyncio
+    task = asyncio.create_task(process_in_background())
+    
+    return {
+        "message": "LLM analysis started",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@router.get("/llm-analytics")
+async def get_llm_analysis_data(
+    limit: int = Query(10, description="Maximum number of records to return"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get LLM analytics data from the database.
+    """
+    records = await get_llm_analytics(db=db, limit=limit)
+    return records
+
+@router.get("/metrics")
+async def get_metrics(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get traffic metrics from the timeseries_analytics table.
+    
+    Returns:
+        - totals: sum of people_ct and vehicle_ct
+        - timeseries: people_ct and vehicle_ct over time
+    """
+    metrics = await get_traffic_metrics(db)
+    return metrics 

@@ -5,7 +5,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-class BaseModel:
+# Import Base from database
+from database import Base
+
+class BaseModel(Base):
     """Base class for all models to inherit common fields and methods"""
     
     # Generate a UUID primary key for all models
@@ -22,6 +25,8 @@ class BaseModel:
     def updated_at(cls):
         return Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Make this an abstract base class 
+    __abstract__ = True
         
     # Generate tablename from class name
     @declared_attr
@@ -69,4 +74,7 @@ class BaseModel:
         await db.delete(self)
         await db.commit()
         return True
+
+# Re-export Base for use in other modules
+__all__ = ['Base', 'BaseModel']
 
