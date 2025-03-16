@@ -89,10 +89,11 @@ def test_get_location():
     if not LOCATION_DATA["location_id"]:
         test_create_location()
     
-    # Get the location
+    # Get the location - now with authentication
     response_data, status_code = make_request(
         "get", 
-        f"/locations/{LOCATION_DATA['location_id']}"
+        f"/locations/{LOCATION_DATA['location_id']}",
+        auth=True
     )
     
     assert status_code == 200, f"Expected status 200, got {status_code}"
@@ -114,10 +115,11 @@ def test_get_all_locations():
     if not LOCATION_DATA["location_id"]:
         test_create_location()
     
-    # Get all locations
+    # Get all locations - now with authentication
     response_data, status_code = make_request(
         "get", 
-        "/locations/"
+        "/locations/",
+        auth=True
     )
     
     assert status_code == 200, f"Expected status 200, got {status_code}"
@@ -234,27 +236,29 @@ def test_delete_location():
     
     # Delete the second location
     response_data, status_code = make_request(
-        "delete", 
-        f"/locations/{LOCATION_DATA['location_2_id']}", 
+        "delete",
+        f"/locations/{LOCATION_DATA['location_2_id']}",
         auth=True,
         expected_status=204
     )
     
     assert status_code == 204, f"Expected status 204, got {status_code}"
     
-    # Verify the location is deleted by trying to get it
+    # Verify the location is deleted by trying to get it - with authentication
     response_data, status_code = make_request(
-        "get", 
+        "get",
         f"/locations/{LOCATION_DATA['location_2_id']}",
+        auth=True,
         expected_status=404
     )
     
     assert status_code == 404, f"Expected status 404, got {status_code}"
     
-    print(f"Successfully deleted location with ID: {LOCATION_DATA['location_2_id']}")
-    
-    # Clear the second location ID
+    # Clear the location_2_id from the global data
     LOCATION_DATA["location_2_id"] = None
+    
+    print(f"Successfully deleted location")
+    return None
 
 def run_location_tests():
     """Run all location tests in sequence"""
