@@ -13,6 +13,7 @@ from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
+import uuid
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -450,4 +451,150 @@ async def get_traffic_metrics(db: AsyncSession) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error getting traffic metrics: {e}")
+        raise
+
+async def get_traffic_metrics_by_location(db: AsyncSession, location_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
+    """
+    Get traffic metrics from the timeseries_analytics table grouped by location.
+    
+    Returns:
+    1. Totals by location: sum of people_ct and vehicle_ct for each location
+    2. Time series by location: people_ct and vehicle_ct over time for each location
+    3. Location details: address, latitude, longitude, etc.
+    
+    Args:
+        db: Database session
+        location_id: Optional UUID to filter by specific location
+        
+    Returns:
+        Dictionary with locations data containing metrics
+    """
+    try:
+        # Base location filter condition
+        location_filter = ""
+        params = {}
+        
+        if location_id:
+            location_filter = "AND l.id = :location_id"
+            params["location_id"] = str(location_id)
+        
+        # Get locations with their metrics totals
+        locations_query = text(f"""
+            SELECT 
+                l.id AS location_id,
+                l.address,
+                l.latitude,
+                l.longitude,
+                l.description,
+                l.tags,
+                l.input_stream_url,
+                l.output_stream_url,
+                l.thumbnail,
+                COUNT(ta.id) AS total_records,
+                SUM(ta.people_ct) AS total_people,
+                SUM(ta.vehicle_ct) AS total_vehicles
+            FROM 
+                location l
+            LEFT JOIN 
+                timeseries_analytics ta ON l.id::varchar = ta.source_id
+            WHERE 
+                (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL OR ta.id IS NULL)
+                {location_filter}
+            GROUP BY 
+                l.id
+            ORDER BY 
+                l.address
+        """)
+        
+        locations_result = await db.execute(locations_query, params)
+        locations_data = locations_result.mappings().all()
+        
+        # Get time series data for each location
+        locations_with_metrics = []
+        
+        for location in locations_data:
+            location_dict = dict(location)
+            
+            # Convert UUID to string
+            location_id_str = str(location["location_id"])
+            
+            # Get time series data for this location
+            timeseries_query = text("""
+                SELECT 
+                    timestamp,
+                    people_ct,
+                    vehicle_ct
+                FROM 
+                    timeseries_analytics
+                WHERE 
+                    source_id = :source_id
+                    AND (people_ct IS NOT NULL OR vehicle_ct IS NOT NULL)
+                ORDER BY 
+                    timestamp
+            """)
+            
+            timeseries_result = await db.execute(timeseries_query, {"source_id": location_id_str})
+            timeseries_data = timeseries_result.mappings().all()
+            
+            # Format time series data
+            timeseries = [
+                {
+                    "timestamp": record["timestamp"].isoformat() if record["timestamp"] else None,
+                    "people_count": record["people_ct"],
+                    "vehicle_count": record["vehicle_ct"]
+                } 
+                for record in timeseries_data
+            ]
+            
+            # Combine location and metrics
+            location_with_metrics = {
+                "id": location["location_id"],
+                "address": location["address"],
+                "latitude": location["latitude"],
+                "longitude": location["longitude"],
+                "description": location["description"],
+                "tags": location["tags"],
+                "input_stream_url": location["input_stream_url"],
+                "output_stream_url": location["output_stream_url"],
+                "thumbnail": location["thumbnail"],
+                "metrics": {
+                    "total_people": int(location["total_people"] or 0),
+                    "total_vehicles": int(location["total_vehicles"] or 0),
+                    "total_records": int(location["total_records"] or 0)
+                },
+                "timeseries": timeseries
+            }
+            
+            locations_with_metrics.append(location_with_metrics)
+        
+        # Get a list of all location IDs for the frontend filter
+        all_locations_query = text("""
+            SELECT 
+                id, 
+                address
+            FROM 
+                location
+            ORDER BY 
+                address
+        """)
+        
+        all_locations_result = await db.execute(all_locations_query)
+        all_locations = all_locations_result.mappings().all()
+        
+        location_filters = [
+            {
+                "id": str(loc["id"]),
+                "address": loc["address"]
+            }
+            for loc in all_locations
+        ]
+        
+        return {
+            "locations": locations_with_metrics,
+            "filters": {
+                "locations": location_filters
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting traffic metrics by location: {e}")
         raise
