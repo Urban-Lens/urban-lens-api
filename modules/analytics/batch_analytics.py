@@ -389,7 +389,14 @@ async def run_llm_analysis(db: AsyncSession, gemini_api_key: str) -> Dict[str, A
         "execution_time_ms": execution_time_ms
     }
 
-async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None, address_filter: Optional[str] = None) -> Dict[str, Any]:
+async def get_traffic_metrics(
+    db: AsyncSession, 
+    skip: int = 0, 
+    limit: int = None, 
+    address_filter: Optional[str] = None,
+    location_id: Optional[uuid.UUID] = None,
+    time_aggregation: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Get traffic metrics from the timeseries_analytics table.
     
@@ -402,6 +409,8 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
         skip: Number of records to skip for pagination
         limit: Maximum number of records to return (None for unlimited)
         address_filter: Optional filter by location address (partial match)
+        location_id: Optional filter by location ID
+        time_aggregation: Time aggregation level (hour, day, or None for raw data)
         
     Returns:
         Dictionary with totals and time series data
@@ -410,6 +419,7 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
         # Base parameters
         params = {"skip": skip}
         address_condition = ""
+        location_id_condition = ""
         
         # Set limit if provided
         if limit is not None:
@@ -419,6 +429,11 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
         if address_filter:
             address_condition = "AND l.address ILIKE :address_filter"
             params["address_filter"] = f"%{address_filter}%"
+            
+        # Add location_id filter if provided
+        if location_id:
+            location_id_condition = "AND l.id = :location_id"
+            params["location_id"] = str(location_id)
         
         # Get totals with location join
         totals_query = text(f"""
@@ -431,25 +446,58 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
             WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
                 AND (l.address IS NOT NULL)
                 {address_condition}
+                {location_id_condition}
         """)
         
         totals_result = await db.execute(totals_query, params)
         totals = totals_result.mappings().first()
         
-        # Get time series data with location info
-        timeseries_query = text(f"""
+        # Time series data with location info and potential time aggregation
+        time_select = ""
+        time_group_by = ""
+        
+        if time_aggregation == "hour":
+            time_select = "date_trunc('hour', ta.timestamp) as timestamp,"
+            time_group_by = "GROUP BY date_trunc('hour', ta.timestamp), ta.source_id, l.address"
+        elif time_aggregation == "day":
+            time_select = "date_trunc('day', ta.timestamp) as timestamp,"
+            time_group_by = "GROUP BY date_trunc('day', ta.timestamp), ta.source_id, l.address"
+        else:
+            # Raw data
+            time_select = "ta.timestamp,"
+            time_group_by = ""
+            
+        # Build base query
+        base_query = f"""
             SELECT 
-                ta.timestamp,
+                {time_select}
                 ta.source_id,
+                l.address,
+        """
+        
+        # Add aggregation for people and vehicles if needed
+        if time_aggregation:
+            base_query += """
+                SUM(ta.people_ct) as people_ct,
+                SUM(ta.vehicle_ct) as vehicle_ct
+            """
+        else:
+            base_query += """
                 ta.people_ct,
-                ta.vehicle_ct,
-                l.address
+                ta.vehicle_ct
+            """
+            
+        # Complete the query
+        timeseries_query = text(f"""
+            {base_query}
             FROM timeseries_analytics ta
             LEFT JOIN location l ON ta.source_id = l.id::varchar
             WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
                 AND (l.address IS NOT NULL)
                 {address_condition}
-            ORDER BY ta.timestamp DESC
+                {location_id_condition}
+            {time_group_by}
+            ORDER BY timestamp DESC
             {f"LIMIT :limit" if limit is not None else ""}
             {f"OFFSET :skip" if skip > 0 else ""}
         """)
@@ -458,14 +506,31 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
         timeseries_data = timeseries_result.mappings().all()
         
         # Get total count for pagination
-        count_query = text(f"""
-            SELECT COUNT(*) as total
-            FROM timeseries_analytics ta
-            LEFT JOIN location l ON ta.source_id = l.id::varchar
-            WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
-                AND (l.address IS NOT NULL)
-                {address_condition}
-        """)
+        if time_aggregation:
+            # We need a different count query for aggregated data
+            count_query = text(f"""
+                SELECT COUNT(*) as total FROM (
+                    SELECT 
+                        {time_select.split(' as ')[0]}
+                    FROM timeseries_analytics ta
+                    LEFT JOIN location l ON ta.source_id = l.id::varchar
+                    WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
+                        AND (l.address IS NOT NULL)
+                        {address_condition}
+                        {location_id_condition}
+                    {time_group_by}
+                ) as subquery
+            """)
+        else:
+            count_query = text(f"""
+                SELECT COUNT(*) as total
+                FROM timeseries_analytics ta
+                LEFT JOIN location l ON ta.source_id = l.id::varchar
+                WHERE (ta.people_ct IS NOT NULL OR ta.vehicle_ct IS NOT NULL)
+                    AND (l.address IS NOT NULL)
+                    {address_condition}
+                    {location_id_condition}
+            """)
         
         count_result = await db.execute(count_query, params)
         total_count = count_result.scalar_one()
@@ -482,8 +547,8 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
                     "timestamp": record["timestamp"].isoformat() if record["timestamp"] else None,
                     "source_id": record["source_id"],
                     "address": record["address"],
-                    "people_count": record["people_ct"],
-                    "vehicle_count": record["vehicle_ct"]
+                    "people_count": int(record["people_ct"] or 0),
+                    "vehicle_count": int(record["vehicle_ct"] or 0)
                 } 
                 for record in timeseries_data
             ],
@@ -491,7 +556,8 @@ async def get_traffic_metrics(db: AsyncSession, skip: int = 0, limit: int = None
                 "total": total_count,
                 "skip": skip,
                 "limit": limit
-            }
+            },
+            "aggregation": time_aggregation or "none"
         }
     except Exception as e:
         logger.error(f"Error getting traffic metrics: {e}")

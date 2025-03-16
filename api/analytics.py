@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, uuid
 from datetime import datetime, timedelta
 
 from database import get_db
@@ -176,6 +176,11 @@ async def get_metrics(
     skip: int = 0,
     limit: Optional[int] = None,
     address_filter: Optional[str] = None,
+    location_id: Optional[uuid.UUID] = None,
+    time_aggregation: Optional[str] = Query(
+        None, 
+        description="Time aggregation level (hour, day, or None for raw data)"
+    ),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -185,11 +190,21 @@ async def get_metrics(
         - skip: Number of records to skip (for pagination)
         - limit: Maximum number of records to return (None for unlimited)
         - address_filter: Filter by location address (partial match)
+        - location_id: Filter by location ID (UUID)
+        - time_aggregation: Aggregate data by time interval (hour, day) or None for raw data
     
     Returns:
         - totals: sum of people_ct and vehicle_ct
         - timeseries: people_ct and vehicle_ct over time, ordered by latest timestamp
         - pagination: metadata for pagination
+        - aggregation: the time aggregation level used
     """
-    metrics = await get_traffic_metrics(db, skip, limit, address_filter)
+    metrics = await get_traffic_metrics(
+        db, 
+        skip, 
+        limit, 
+        address_filter, 
+        location_id, 
+        time_aggregation
+    )
     return metrics 
