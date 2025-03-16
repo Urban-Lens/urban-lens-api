@@ -56,7 +56,7 @@ async def send_password_reset_email(email: str, token: str):
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
-    login_data: LoginRequest,
+    login_data: LoginRequest = Body(...),
     db: AsyncSession = Depends(get_db)
 ):
     """Login endpoint to get an access token"""
